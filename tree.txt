@@ -1,0 +1,21 @@
+NamY_Bioacoustics/
+│
+├── app.py                  # File chính chạy giao diện Streamlit
+├── requirements.txt        # Danh sách thư viện (streamlit, librosa, plotly, numpy...)
+├── README.md               # Tài liệu mô tả dự án
+│
+├── data/                   # Thư mục chứa dữ liệu âm thanh
+│   ├── raw/                # Chứa file gốc tải từ YouTube (mp4, mp3) chưa qua xử lý
+│   └── processed/          # Chứa file đã lọc nhiễu, cắt đoạn (wav)
+│
+├── src/                    # Thư mục chứa các module xử lý lõi (Backend)
+│   ├── __init__.py
+│   ├── audio_utils.py      # Các hàm Python xử lý âm thanh (load, lọc nhiễu, trích xuất F0)
+│   └── viz_utils.py        # Các hàm vẽ biểu đồ (Waveform, Spectrogram 2D/3D)
+│
+├── notebooks/              # Dành cho việc nghiên cứu nháp
+│   └── data_exploration.ipynb # File Jupyter Notebook để bạn test code Librosa và xem phổ ký Chào mào trước khi đưa vào app chính
+│
+└── assets/                 # Thư mục chứa tài nguyên tĩnh
+    ├── css/                # File CSS nếu bạn muốn tùy chỉnh giao diện Streamlit
+    └── images/             # Logo NamY, hình ảnh minh họa chim Chào mào
