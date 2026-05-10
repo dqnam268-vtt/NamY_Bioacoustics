@@ -2,63 +2,72 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 import numpy as np
 import os
+import subprocess
 
-def render_3d_video(x, y, z, output_path="namy_output.mp4"):
+def render_3d_video(x, y, z, audio_path, output_path="namy_final_video.mp4"):
     """
-    Vẽ quỹ đạo âm thanh 3D và xuất thành file video MP4.
+    Vẽ quỹ đạo âm thanh 3D, sau đó ghép âm thanh gốc vào video.
     """
-    # 1. Khởi tạo khung hình với nền đen huyền ảo
-    fig = plt.figure(figsize=(12, 9), facecolor='black')
+    # 1. Tên file video tạm (không có âm thanh)
+    temp_video = "temp_silent_video.mp4"
+
+    # --- PHẦN VẼ 3D (GIỮ NGUYÊN HOẶC TINH CHỈNH LUNG LINH) ---
+    fig = plt.figure(figsize=(10, 10), facecolor='black')
     ax = fig.add_subplot(111, projection='3d', facecolor='black')
-    
-    # Ẩn các trục tọa độ để tập trung vào hình khối âm thanh
     ax.set_axis_off()
 
-    # Khởi tạo đường vẽ (line) và điểm sáng hiện tại (point)
-    # Màu #10b981 là màu xanh thương hiệu Emerald
-    line, = ax.plot([], [], [], color='#10b981', alpha=0.5, lw=1.2)
-    point = ax.scatter([], [], [], color='white', s=40, edgecolors='#10b981', linewidth=1)
+    line, = ax.plot([], [], [], color='#4ade80', alpha=0.2, lw=0.8)
+    scatter = ax.scatter([], [], [], s=[], c=[], cmap='magma', edgecolors='white', linewidth=0.1, alpha=0.9)
 
-    # Giới hạn không gian hiển thị (vì dữ liệu đã chuẩn hóa 0-1)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.set_zlim(0, 1)
 
-    def init():
-        line.set_data([], [])
-        line.set_3d_properties([])
-        return line, point
-
     def update(frame):
-        # Vẽ "quá khứ" của tiếng hót (đường nối)
-        line.set_data(x[:frame], y[:frame])
-        line.set_3d_properties(z[:frame])
+        current_x = x[:frame]
+        current_y = y[:frame]
+        current_z = z[:frame]
         
-        # Cập nhật "hiện tại" (điểm đang phát sáng)
-        # Lưu ý: scatter dùng mảng cho offsets3d
-        point._offsets3d = ([x[frame]], [y[frame]], [z[frame]])
+        line.set_data(current_x, current_y)
+        line.set_3d_properties(current_z)
         
-        # Hiệu ứng xoay camera chậm xung quanh trục Z
-        # Tạo cảm giác không gian 3D thực thụ
-        ax.view_init(elev=20, azim=frame * 0.7) 
+        scatter._offsets3d = (current_x, current_y, current_z)
+        sizes = np.linspace(1, 120, frame) * current_z 
+        scatter.set_sizes(sizes)
+        scatter.set_array(current_x)
         
-        return line, point
+        ax.view_init(elev=20 + np.sin(frame*0.05)*5, azim=frame * 0.8)
+        return line, scatter
 
-    # 2. Tạo Animation
-    # frames: tổng số khung hình dựa trên độ dài dữ liệu
-    # interval: tốc độ chuyển cảnh (ms)
-    ani = FuncAnimation(
-        fig, update, frames=len(x), 
-        init_func=init, blit=False, interval=30
-    )
+    # 2. Render video không âm thanh
+    fps = 30
+    ani = FuncAnimation(fig, update, frames=len(x), interval=1000/fps, blit=False)
+    writer = FFMpegWriter(fps=fps, bitrate=3000)
+    ani.save(temp_video, writer=writer)
+    plt.close(fig)
 
-    # 3. Xuất Video bằng FFMpeg
-    # fps=30 cho chuyển động mượt mà như video mẫu
-    writer = FFMpegWriter(fps=30, metadata=dict(artist='NamY Bioacoustics'), bitrate=2500)
-    
+    # 3. GHÉP ÂM THANH VÀO VIDEO (SỬ DỤNG FFMPEG)
+    # Câu lệnh này sẽ lấy hình ảnh từ temp_video và âm thanh từ audio_path
     try:
-        ani.save(output_path, writer=writer)
+        # Nếu audio_path là đối tượng file của Streamlit, ta cần lưu nó ra file tạm trước
+        # Nhưng ở bước app.py ta sẽ xử lý việc truyền đường dẫn file thực
+        cmd = [
+            'ffmpeg', '-y', 
+            '-i', temp_video, 
+            '-i', audio_path, 
+            '-map', '0:v', '-map', '1:a', 
+            '-c:v', 'copy', '-c:a', 'aac', 
+            '-shortest', # Cắt video/audio theo cái nào ngắn hơn để đồng bộ
+            output_path
+        ]
+        subprocess.run(cmd, check=True)
+    except Exception as e:
+        print(f"Lỗi khi ghép âm thanh: {e}")
+        # Nếu lỗi ghép âm thanh, trả về video không tiếng để tránh crash app
+        return temp_video
     finally:
-        plt.close(fig) # Giải phóng bộ nhớ RAM sau khi render
-        
+        # Xóa video tạm không tiếng
+        if os.path.exists(temp_video):
+            os.remove(temp_video)
+
     return output_path

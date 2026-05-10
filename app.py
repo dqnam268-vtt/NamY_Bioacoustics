@@ -45,7 +45,7 @@ if uploaded_file:
             st.write("✨ **Đã lọc nhiễu (High-pass > 1500Hz)**")
             st.audio(y_clean, sample_rate=sr)
 
-    # 3. Vẽ biểu đồ Waveform 2D (như trong ảnh bạn gửi)
+    # 3. Vẽ biểu đồ Waveform 2D
     st.write("### Biểu đồ dạng sóng (đã giảm mật độ điểm để tăng tốc độ load)")
     
     # Giảm mật độ điểm để biểu đồ Plotly chạy mượt
@@ -71,23 +71,26 @@ if uploaded_file:
 
     st.markdown("---")
 
-    # 4. Tính năng Render Video 3D (Trái tim của ứng dụng)
+    # 4. Tính năng Render Video 3D (Có tích hợp âm thanh)
     st.write("### 🎬 Xuất mô phỏng hình học 3D")
-    st.info("Hệ thống sẽ trích xuất Spectral Centroid, Rolloff và RMS để tạo quỹ đạo không gian.")
+    st.info("Hệ thống sẽ trích xuất đặc trưng vật lý và ghép âm thanh gốc vào video quỹ đạo không gian.")
 
     if st.button("🚀 Render Video 3D (NamY Engine)"):
-        # Tạo thanh tiến trình giả lập hoặc thông báo
-        progress_text = "Đang tính toán tọa độ và vẽ từng khung hình... Vui lòng đợi."
-        with st.status(progress_text, expanded=True) as status:
+        with st.status("Đang chuẩn bị dữ liệu và render...", expanded=True) as status:
+            # Tạo đường dẫn tạm cho file audio đầu vào để ffmpeg có thể đọc được
+            temp_audio_path = f"temp_input_{uploaded_file.name}"
+            with open(temp_audio_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+
             try:
                 # Bước A: Lấy tọa độ x, y, z
                 x_coords, y_coords, z_coords = get_3d_coordinates(y_clean, sr)
                 
                 # Bước B: Định nghĩa file đầu ra
-                output_video = "namy_bird_geometry.mp4"
+                output_video = "namy_bird_3d_with_audio.mp4"
                 
-                # Bước C: Gọi hàm render từ viz_utils
-                render_3d_video(x_coords, y_coords, z_coords, output_video)
+                # Bước C: Gọi hàm render từ viz_utils (đã bao gồm audio_path để ghép nhạc)
+                render_3d_video(x_coords, y_coords, z_coords, temp_audio_path, output_video)
                 
                 status.update(label="✅ Render hoàn tất!", state="complete", expanded=False)
                 
@@ -102,13 +105,17 @@ if uploaded_file:
                         mime="video/mp4"
                     )
                 
-                # Dọn dẹp file tạm sau khi hiển thị
+                # Dọn dẹp file video sau khi hiển thị
                 if os.path.exists(output_video):
                     os.remove(output_video)
                     
             except Exception as e:
                 st.error(f"Có lỗi xảy ra trong quá trình render: {e}")
                 status.update(label="❌ Lỗi render", state="error")
+            finally:
+                # Dọn dẹp file audio tạm thời
+                if os.path.exists(temp_audio_path):
+                    os.remove(temp_audio_path)
 
 else:
     st.write("👆 Hãy tải lên một file âm thanh để bắt đầu hành trình giải mã.")
