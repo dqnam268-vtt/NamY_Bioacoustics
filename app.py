@@ -1,50 +1,114 @@
-# app.py
 import streamlit as st
-import plotly.graph_objects as go
-from src.audio_utils import load_and_clean_audio, apply_highpass_filter
-import librosa
+import os
 import numpy as np
+import plotly.graph_objects as go
+from src.audio_utils import load_and_clean_audio, apply_highpass_filter, get_3d_coordinates
+from src.viz_utils import render_3d_video
 
-# Cấu hình thương hiệu NamY
-st.set_page_config(page_title="NamY Bioacoustics - Chào Mào Project", layout="wide")
+# 1. Cấu hình giao diện NamY Bioacoustics
+st.set_page_config(
+    page_title="NamY Bioacoustics - Bird Sound Geometry",
+    page_icon="🕊️",
+    layout="wide"
+)
 
+# Sidebar thương hiệu
 st.sidebar.title("🕊️ NamY Bioacoustics")
-st.sidebar.info("Dự án phân tích ngôn ngữ chim Chào Mào (Red-whiskered Bulbul)")
+st.sidebar.markdown("""
+Dự án giải mã ngôn ngữ loài chim thông qua hình học âm thanh 3D.
+**Đối tượng:** Chim Chào Mào (*Red-whiskered Bulbul*)
+""")
+st.sidebar.divider()
+st.sidebar.caption("© 2026 NamY Engine")
 
-st.title("Phân tích Âm thanh Chim Bản địa")
+# Tiêu đề chính
+st.title("📊 Phân tích cấu trúc âm tiết (Syllables)")
 st.markdown("---")
 
-# Khu vực Upload
-uploaded_file = st.file_uploader("Chọn file âm thanh Chào mào (mp3, wav)", type=["mp3", "wav"])
+# 2. Khu vực tải lên dữ liệu
+uploaded_file = st.file_uploader("Tải lên file âm thanh Chào mào từ YouTube (mp3, wav)", type=["mp3", "wav"])
 
 if uploaded_file:
-    col1, col2 = st.columns([1, 1])
+    # Tạo các cột hiển thị âm thanh
+    col1, col2 = st.columns(2)
     
-    with col1:
-        st.subheader("🔊 Dữ liệu gốc")
-        st.audio(uploaded_file)
+    with st.spinner('Đang xử lý âm thanh...'):
+        # Load và làm sạch
         y, sr = load_and_clean_audio(uploaded_file)
-        st.write(f"Sample Rate: {sr} Hz | Độ dài: {len(y)/sr:.2f} s")
-
-    with col2:
-        st.subheader("✨ Dữ liệu đã qua lọc nhiễu")
         y_clean = apply_highpass_filter(y, sr)
-        # Lưu tạm file đã lọc để nghe thử (option)
-        st.audio(y_clean, sample_rate=sr)
+        
+        with col1:
+            st.write("🔊 **Âm thanh gốc**")
+            st.audio(uploaded_file)
+            
+        with col2:
+            st.write("✨ **Đã lọc nhiễu (High-pass > 1500Hz)**")
+            st.audio(y_clean, sample_rate=sr)
 
-    # Vẽ biểu đồ tương tác bằng Plotly (để có thể zoom vào từng âm tiết)
-    st.subheader("📊 Phân tích cấu trúc âm tiết (Syllables)")
+    # 3. Vẽ biểu đồ Waveform 2D (như trong ảnh bạn gửi)
+    st.write("### Biểu đồ dạng sóng (đã giảm mật độ điểm để tăng tốc độ load)")
     
-    time = np.linspace(0, len(y_clean)/sr, len(y_clean))
+    # Giảm mật độ điểm để biểu đồ Plotly chạy mượt
+    step = 10
+    time_axis = np.linspace(0, len(y_clean)/sr, len(y_clean))[::step]
+    amplitude = y_clean[::step]
+
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=time[::10], y=y_clean[::10], name="Waveform", line=dict(color='#1f77b4')))
+    fig.add_trace(go.Scatter(
+        x=time_axis, 
+        y=amplitude, 
+        name="Waveform", 
+        line=dict(color='#1f77b4', width=1)
+    ))
     fig.update_layout(
-        title="Biểu đồ dạng sóng (đã giảm mật độ điểm để tăng tốc độ load)",
         xaxis_title="Thời gian (giây)",
         yaxis_title="Biên độ",
-        template="plotly_dark"
+        template="plotly_white",
+        height=400,
+        margin=dict(l=20, r=20, t=20, b=20)
     )
     st.plotly_chart(fig, use_container_width=True)
 
-st.markdown("---")
-st.caption("© 2026 NamY - Phát triển dựa trên niềm đam mê thiên nhiên và công nghệ.")
+    st.markdown("---")
+
+    # 4. Tính năng Render Video 3D (Trái tim của ứng dụng)
+    st.write("### 🎬 Xuất mô phỏng hình học 3D")
+    st.info("Hệ thống sẽ trích xuất Spectral Centroid, Rolloff và RMS để tạo quỹ đạo không gian.")
+
+    if st.button("🚀 Render Video 3D (NamY Engine)"):
+        # Tạo thanh tiến trình giả lập hoặc thông báo
+        progress_text = "Đang tính toán tọa độ và vẽ từng khung hình... Vui lòng đợi."
+        with st.status(progress_text, expanded=True) as status:
+            try:
+                # Bước A: Lấy tọa độ x, y, z
+                x_coords, y_coords, z_coords = get_3d_coordinates(y_clean, sr)
+                
+                # Bước B: Định nghĩa file đầu ra
+                output_video = "namy_bird_geometry.mp4"
+                
+                # Bước C: Gọi hàm render từ viz_utils
+                render_3d_video(x_coords, y_coords, z_coords, output_video)
+                
+                status.update(label="✅ Render hoàn tất!", state="complete", expanded=False)
+                
+                # Hiển thị video và nút tải về
+                st.video(output_video)
+                
+                with open(output_video, "rb") as file:
+                    st.download_button(
+                        label="📥 Tải video 3D về máy",
+                        data=file,
+                        file_name="NamY_ChaoMao_3D.mp4",
+                        mime="video/mp4"
+                    )
+                
+                # Dọn dẹp file tạm sau khi hiển thị
+                if os.path.exists(output_video):
+                    os.remove(output_video)
+                    
+            except Exception as e:
+                st.error(f"Có lỗi xảy ra trong quá trình render: {e}")
+                status.update(label="❌ Lỗi render", state="error")
+
+else:
+    st.write("👆 Hãy tải lên một file âm thanh để bắt đầu hành trình giải mã.")
