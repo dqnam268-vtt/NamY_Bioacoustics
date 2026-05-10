@@ -5,19 +5,18 @@ import os
 import subprocess
 
 def render_3d_video(x, y, z, audio_path, output_path="namy_final_video.mp4"):
-    """
-    Vẽ quỹ đạo âm thanh 3D, sau đó ghép âm thanh gốc vào video.
-    """
-    # 1. Tên file video tạm (không có âm thanh)
     temp_video = "temp_silent_video.mp4"
 
-    # --- PHẦN VẼ 3D (GIỮ NGUYÊN HOẶC TINH CHỈNH LUNG LINH) ---
-    fig = plt.figure(figsize=(10, 10), facecolor='black')
-    ax = fig.add_subplot(111, projection='3d', facecolor='black')
+    # 1. Thiết lập nền sáng (Light Theme)
+    fig = plt.figure(figsize=(10, 10), facecolor='white')
+    ax = fig.add_subplot(111, projection='3d', facecolor='white')
     ax.set_axis_off()
 
-    line, = ax.plot([], [], [], color='#4ade80', alpha=0.2, lw=0.8)
-    scatter = ax.scatter([], [], [], s=[], c=[], cmap='magma', edgecolors='white', linewidth=0.1, alpha=0.9)
+    # Đường nối mờ tạo hiệu ứng quỹ đạo
+    line, = ax.plot([], [], [], color='#059669', alpha=0.2, lw=0.8)
+    
+    # Hạt năng lượng dùng cmap 'turbo' (giống video gốc) và viền mảnh
+    scatter = ax.scatter([], [], [], s=[], c=[], cmap='turbo', edgecolors='black', linewidth=0.1, alpha=0.8)
 
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -32,42 +31,36 @@ def render_3d_video(x, y, z, audio_path, output_path="namy_final_video.mp4"):
         line.set_3d_properties(current_z)
         
         scatter._offsets3d = (current_x, current_y, current_z)
-        sizes = np.linspace(1, 120, frame) * current_z 
-        scatter.set_sizes(sizes)
-        scatter.set_array(current_x)
         
-        ax.view_init(elev=20 + np.sin(frame*0.05)*5, azim=frame * 0.8)
+        # Hiệu ứng lung linh: các điểm mới nhất to hơn các điểm cũ
+        # np.linspace tạo mảng kích thước tăng dần từ 5 đến 150
+        base_sizes = np.linspace(5, 150, frame) 
+        sizes = base_sizes * current_z # Nhân với biên độ RMS để "nhảy" theo nhạc
+        
+        scatter.set_sizes(sizes)
+        scatter.set_array(current_x) # Đổi màu theo trục X (Tần số trọng tâm)
+        
+        # Xoay camera linh hoạt
+        ax.view_init(elev=25, azim=frame * 0.6)
         return line, scatter
 
-    # 2. Render video không âm thanh
     fps = 30
     ani = FuncAnimation(fig, update, frames=len(x), interval=1000/fps, blit=False)
     writer = FFMpegWriter(fps=fps, bitrate=3000)
     ani.save(temp_video, writer=writer)
     plt.close(fig)
 
-    # 3. GHÉP ÂM THANH VÀO VIDEO (SỬ DỤNG FFMPEG)
-    # Câu lệnh này sẽ lấy hình ảnh từ temp_video và âm thanh từ audio_path
+    # Ghép âm thanh vào video
     try:
-        # Nếu audio_path là đối tượng file của Streamlit, ta cần lưu nó ra file tạm trước
-        # Nhưng ở bước app.py ta sẽ xử lý việc truyền đường dẫn file thực
         cmd = [
-            'ffmpeg', '-y', 
-            '-i', temp_video, 
-            '-i', audio_path, 
-            '-map', '0:v', '-map', '1:a', 
-            '-c:v', 'copy', '-c:a', 'aac', 
-            '-shortest', # Cắt video/audio theo cái nào ngắn hơn để đồng bộ
-            output_path
+            'ffmpeg', '-y', '-i', temp_video, '-i', audio_path, 
+            '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', 
+            '-shortest', output_path
         ]
         subprocess.run(cmd, check=True)
-    except Exception as e:
-        print(f"Lỗi khi ghép âm thanh: {e}")
-        # Nếu lỗi ghép âm thanh, trả về video không tiếng để tránh crash app
+    except:
         return temp_video
     finally:
-        # Xóa video tạm không tiếng
-        if os.path.exists(temp_video):
-            os.remove(temp_video)
+        if os.path.exists(temp_video): os.remove(temp_video)
 
     return output_path
